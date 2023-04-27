@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Export to CSV</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 20px;
+    }
+
+    input,
+    button {
+      font-size: 16px;
+    }
+
+    input {
+      padding: 5px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    button {
+      background-color: #1665D8;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    button:hover {
+      background-color: #0A3E91;
+    }
+
+    button:active {
+      background-color: #0A3E91;
+      transform: translateY(1px);
+    }
+  </style>
+</head>
+<body>
+  <label for="apiKey">Google Translate API Key:</label>
+  <p>You can get your API Key from here: <a href="https://console.cloud.google.com/apis/library/translate.googleapis.com"></a> Translate API Key </p>
+  <input  type="text" id="apiKey" placeholder="Enter API key">
+  <button id="export">Translate design and export JSON</button>
+
+  <div id="downloadLinkContainer"></div>
+
+  <script>
+    const apiKeyInput = document.getElementById('apiKey');
+    const exportButton = document.getElementById('export');
+
+    exportButton.onclick = () => {
+      const apiKey = apiKeyInput.value;
+      if (apiKey) {
+        parent.postMessage({ pluginMessage: { type: 'duplicate-and-translate', apiKey } }, '*');
+      } else {
+        alert('Please enter a valid API key.');
+      }
+    };
+
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === 'download-csv') {
+        const anchor = document.createElement('a');
+        console.log('Content', msg.content);
+        anchor.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(msg.content);
+        anchor.target = '_blank';
+        anchor.download = 'export.csv';
+        anchor.click();
+      }
+    };
+  </script>
+</body>
+</html>

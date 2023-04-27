@@ -1,0 +1,15 @@
+{
+  "name": "Ali Text Exporter and Translator",
+  "id": "text-exporter-and-translator",
+  "api": "1.0.0",
+  "main": "src/code.ts",
+  "ui": "src/ui.html",
+  "permissions": [
+    "currentuser",
+    "fileusers"
+  ],
+  "enableProposedApi": false,
+  "editorType": [
+    "figma"
+  ]
+}
