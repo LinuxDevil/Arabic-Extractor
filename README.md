@@ -1,5 +1,7 @@
 # Arabic Extractor Plugin for Figma
 
+![plot](./cover-art.png)
+
 Arabic Extractor is a Figma plugin that simplifies working with Arabic content in Figma designs. It allows you to automatically duplicate your design frames, translate text content into Arabic, rearrange the layout for right-to-left reading, and export the translated text as a JSON file using an Express server.
 
 ## Features

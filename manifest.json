@@ -1,6 +1,6 @@
 {
   "name": "Ali Text Exporter and Translator",
-  "id": "text-exporter-and-translator",
+  "id": "1233364264093192199",
   "api": "1.0.0",
   "main": "src/code.ts",
   "ui": "src/ui.html",
