@@ -12,47 +12,6 @@ async function translateText(text, apiKey) {
     return data.data.translations[0].translatedText;
 }
 
-function arrayBufferToBase64(buffer) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    const bytes = new Uint8Array(buffer);
-    let base64 = '';
-
-    for (let i = 0; i < bytes.byteLength; i += 3) {
-        const a = bytes[i];
-        const b = bytes[i + 1];
-        const c = bytes[i + 2];
-
-        const index1 = a >> 2;
-        const index2 = ((a & 3) << 4) | (b >> 4);
-        const index3 = isNaN(b) ? 64 : ((b & 15) << 2) | (c >> 6);
-        const index4 = isNaN(b) || isNaN(c) ? 64 : c & 63;
-
-        base64 += chars[index1] + chars[index2] + chars[index3] + chars[index4];
-    }
-
-    return base64;
-}
-
-
-async function exportFrameAsImage(frame) {
-    const imageData = await frame.exportAsync({ format: 'PNG' });
-    const base64Data = arrayBufferToBase64(imageData);
-    return `data:image/png;base64,${base64Data}`;
-}
-
-async function processFrame(frame, apiKey) {
-    const texts = frame.findAll((n) => n.type === 'TEXT');
-    const textData = [];
-
-    for (const textNode of texts) {
-        const translation = await translateText(textNode.characters, apiKey);
-
-        textData.push({ text: textNode.characters, translation });
-    }
-
-    return textData;
-}
-
 const toJSONNode = (originalText) => {
     if (originalText.length > 20) {
         originalText = originalText.substring(0, 20);
@@ -60,80 +19,120 @@ const toJSONNode = (originalText) => {
     return originalText.toLocaleLowerCase().split(' ').join('_');
 }
 
-const setTextOfNode = async (textNode, text) => {
-    if (textNode.hasMissingFont) {
-        throw "<missing font error goes here>";
-    }
+const getUniqueFonts = (textNode) => {
     const foundFonts = [];
     const len = textNode.characters.length;
 
     for (let i = 0; i < len; i++) {
         const fontName = textNode.getRangeFontName(i, i + 1);
-        if (foundFonts.find(f => f.family === fontName.family && f.style === fontName.style) === undefined) {
+        if (!foundFonts.some(f => f.family === fontName.family && f.style === fontName.style)) {
             foundFonts.push(fontName);
         }
     }
 
+    return foundFonts;
+};
+
+const loadFonts = async (foundFonts) => {
     const fontPromises = foundFonts.map(f => figma.loadFontAsync(f));
-    await Promise.all(fontPromises).then(() => {
-        textNode.characters = text;
-        textNode.textAlignHorizontal = 'RIGHT';
-    });
+    await Promise.all(fontPromises);
+};
+
+const setTextAndAlignment = (textNode, text) => {
+    textNode.characters = text;
+    textNode.textAlignHorizontal = 'RIGHT';
+};
+
+const setTextOfNode = async (textNode, text) => {
+    if (textNode.hasMissingFont) {
+        throw "<missing font error goes here>";
+    }
+
+    const foundFonts = getUniqueFonts(textNode);
+    await loadFonts(foundFonts);
+    setTextAndAlignment(textNode, text);
+
     return textNode;
-}
+};
+
+const duplicateNodeAndPosition = (node) => {
+    const duplicatedNode = node.clone();
+    duplicatedNode.name = `${node.name} - Arabic`;
+    duplicatedNode.x += node.width + 50;
+    return duplicatedNode;
+};
+
+const processChildNodes = async (childNode, apiKey, json) => {
+    if (childNode.children) {
+        const childNodeChildren = childNode.children;
+        for (const childNodeChild of childNodeChildren) {
+            if (childNodeChild.characters) {
+                const originalText = childNodeChild.characters;
+                const translatedText = await translateText(originalText, apiKey);
+
+                await setTextOfNode(childNodeChild, translatedText);
+                json[toJSONNode(originalText)] = translatedText;
+            }
+        }
+    }
+};
+
+const processChildNodeCharacters = async (childNodeChild, apiKey, json) => {
+    if (childNodeChild.characters) {
+        const originalText = childNodeChild.characters;
+        const translatedText = await translateText(originalText, apiKey);
+
+        await setTextOfNode(childNodeChild, translatedText);
+        json[toJSONNode(originalText)] = translatedText;
+    }
+};
+
+const processChildNodes = async (childNode, apiKey, json) => {
+    if (childNode.children) {
+        const childNodeChildren = childNode.children;
+        for (const childNodeChild of childNodeChildren) {
+            await processChildNodeCharacters(childNodeChild, apiKey, json);
+        }
+    }
+};
+
+
+const postTranslationsAndHandleResponse = async (json) => {
+    const result = await fetch('http://localhost:3000/translate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file: json }),
+    });
+
+    const data = await result.json();
+    figma.ui.postMessage({ type: 'copy-to-clipboard', text: data.downloadUrl });
+
+    const openLinkUIString = `<script>window.open('${data.downloadUrl}','_blank');</script>`
+    figma.showUI(openLinkUIString, { visible: false })
+
+    setTimeout(figma.closePlugin, 1000);
+};
 
 async function processFrameAndDuplicate(node, apiKey) {
     try {
-        const duplicatedNode = node.clone();
-        duplicatedNode.name = `${node.name} - Arabic`;
-        duplicatedNode.x += node.width + 50;
-
+        const duplicatedNode = duplicateNodeAndPosition(node);
         const children = duplicatedNode.children;
         const json = {};
 
         for (const childNode of children) {
-
-            if (childNode.children) {
-                const childNodeChildren = childNode.children;
-                for (const childNodeChild of childNodeChildren) {
-                    if (childNodeChild.characters) {
-                        const originalText = childNodeChild.characters;
-                        const translatedText = await translateText(originalText, apiKey);
-
-                        await setTextOfNode(childNodeChild, translatedText);
-                        json[toJSONNode(originalText)] = translatedText;
-                    }
-                }
-            }
-            if (childNode.characters) {
-                const originalText = childNode.characters;
-                const translatedText = await translateText(originalText, apiKey);
-
-                setTextOfNode(childNode, translatedText);
-                json[toJSONNode(originalText)] = translatedText;
-            }
+            await processChildNodes(childNode, apiKey, json);
+            await processNodeCharacters(childNode, apiKey, json);
         }
 
-        const result = await fetch('http://localhost:3000/translate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ file: json }),
-        });
-
-        const data = await result.json();
-        figma.ui.postMessage({ type: 'copy-to-clipboard', text: data.downloadUrl });
-
-        const openLinkUIString = `<script>window.open('${data.downloadUrl}','_blank');</script>`
-        figma.showUI(openLinkUIString, { visible: false })
-
-        setTimeout(figma.closePlugin, 1000)
+        await postTranslationsAndHandleResponse(json);
         figma.currentPage.appendChild(duplicatedNode);
     } catch (e) {
         figma.ui.postMessage({ type: 'error', error: e });
     }
 }
+
 
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'duplicate-and-translate') {
